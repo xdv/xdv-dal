@@ -1,0 +1,16 @@
+﻿// File: dal_interface.ds
+// Stable interface surface for XDV Domain Abstraction Layer
+forge XdvDalInterface {
+    const INTERFACE_VERSION_MAJOR: UInt32 = 0;
+    const INTERFACE_VERSION_MINOR: UInt32 = 1;
+    const INTERFACE_VERSION_PATCH: UInt32 = 0;
+    proc K::interface_version_major() -> UInt32 {
+        return INTERFACE_VERSION_MAJOR;
+    }
+    proc K::interface_version_minor() -> UInt32 {
+        return INTERFACE_VERSION_MINOR;
+    }
+    proc K::interface_version_patch() -> UInt32 {
+        return INTERFACE_VERSION_PATCH;
+    }
+}
