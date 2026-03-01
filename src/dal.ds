@@ -1,8 +1,8 @@
 // File: dal.ds - This file is part of XDV
 // Copyright (c) 2026 Dust LLC, and Contributors
 // Description:
-//   XDV Kernel - Domain Abstraction Layer (DAL)
-//   Core domain types, capabilities, and interfaces
+//   XDV Domain Abstraction Layer (DAL)
+//   Deterministic capability negotiation and lifecycle transition enforcement.
 
 forge XdvDal {
 
@@ -19,84 +19,819 @@ forge XdvDal {
     const CAP_QUANTUM_STATE: UInt64 = 32;
     const CAP_PHASE_STATE: UInt64 = 64;
     const CAP_TELEMETRY: UInt64 = 128;
+    const CAP_RESOURCE_RESERVE: UInt64 = 256;
+    const CAP_LIFECYCLE: UInt64 = 512;
+
+    const OP_INIT: UInt32 = 1;
+    const OP_REQUEST_RESOURCES: UInt32 = 2;
+    const OP_EXECUTE: UInt32 = 3;
+    const OP_PROJECT: UInt32 = 4;
+    const OP_TERMINATE: UInt32 = 5;
+    const OP_REPORT_FAULT: UInt32 = 6;
+    const OP_TRANSITION: UInt32 = 7;
+
+    const SCOPE_DOMAIN_LOCAL: UInt32 = 1;
+    const SCOPE_RESOURCE_RESERVATION: UInt32 = 2;
+    const SCOPE_EXECUTION_WINDOW: UInt32 = 3;
+    const SCOPE_CROSS_DOMAIN: UInt32 = 4;
+    const SCOPE_LIFECYCLE: UInt32 = 5;
+
+    const STATE_UNBOUND: UInt32 = 0;
+    const STATE_BOUND: UInt32 = 1;
+    const STATE_INITIALIZED: UInt32 = 2;
+    const STATE_ACTIVE: UInt32 = 3;
+    const STATE_SUSPENDED: UInt32 = 4;
+    const STATE_TERMINATED: UInt32 = 5;
+    const STATE_RELEASED: UInt32 = 6;
+
+    const TOKEN_NONE: UInt64 = 0;
+    const TOKEN_TRANSFERABLE: UInt32 = 1;
+    const TOKEN_NON_TRANSFERABLE: UInt32 = 0;
+    const TOKEN_ORIGIN_FACTOR: UInt64 = 1000000000000000;
+    const TOKEN_TARGET_FACTOR: UInt64 = 100000000000000;
+    const TOKEN_OPERATION_FACTOR: UInt64 = 1000000000000;
+    const TOKEN_SCOPE_FACTOR: UInt64 = 10000000000;
+    const TOKEN_TRANSFER_FACTOR: UInt64 = 1000000000;
+    const TOKEN_PROCESS_FACTOR: UInt64 = 10000;
+    const TOKEN_PROCESS_CYCLE: UInt32 = 100000;
+    const TOKEN_TIMESTAMP_CYCLE: UInt32 = 10000;
+    const TOKEN_MAX_AGE: UInt32 = 100000;
 
     const STATUS_OK: UInt32 = 0;
     const STATUS_INVALID_CAPABILITY: UInt32 = 1;
     const STATUS_INVALID_DOMAIN: UInt32 = 2;
+    const STATUS_INVALID_OPERATION: UInt32 = 3;
+    const STATUS_INVALID_SCOPE: UInt32 = 4;
+    const STATUS_INVALID_TRANSITION: UInt32 = 5;
+    const STATUS_UNAUTHORIZED: UInt32 = 6;
+    const STATUS_TOKEN_REVOKED: UInt32 = 7;
+    const STATUS_PRECONDITION_FAILED: UInt32 = 8;
+    const STATUS_CROSS_DOMAIN_BLOCKED: UInt32 = 9;
+    const STATUS_INVALID_STATE: UInt32 = 10;
+
+    const DAL_INTERFACE_VERSION_MAJOR: UInt32 = 0;
+    const DAL_INTERFACE_VERSION_MINOR: UInt32 = 1;
+    const DAL_INTERFACE_VERSION_PATCH: UInt32 = 0;
+    const DAL_CAPABILITY_MODEL_VERSION: UInt32 = 1;
+    const DAL_LIFECYCLE_API_VERSION: UInt32 = 1;
 
     proc K::domain_init_stage1() -> UInt32 {
         emit "XDV DAL: Initializing Domain Abstraction Layer";
         emit "XDV DAL: Registering K-Domain capabilities";
         emit "XDV DAL: Q-Domain and Phi-Domain registered";
+        emit "XDV DAL: capability and lifecycle contracts active";
         return STATUS_OK;
+    }
+
+    proc K::domain_to_u32(domain: UInt8) -> UInt32 {
+        return domain;
+    }
+
+    proc K::is_valid_domain(domain: UInt8) -> UInt32 {
+        if domain == DOMAIN_K {
+            return 1;
+        } else {
+            if domain == DOMAIN_Q {
+                return 1;
+            } else {
+                if domain == DOMAIN_PHI {
+                    return 1;
+                } else {
+                    return 0;
+                }
+            }
+        }
+    }
+
+    proc K::is_valid_scope(scope: UInt32) -> UInt32 {
+        if scope == SCOPE_DOMAIN_LOCAL {
+            return 1;
+        } else {
+            if scope == SCOPE_RESOURCE_RESERVATION {
+                return 1;
+            } else {
+                if scope == SCOPE_EXECUTION_WINDOW {
+                    return 1;
+                } else {
+                    if scope == SCOPE_CROSS_DOMAIN {
+                        return 1;
+                    } else {
+                        if scope == SCOPE_LIFECYCLE {
+                            return 1;
+                        } else {
+                            return 0;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    proc K::is_valid_operation(operation: UInt32) -> UInt32 {
+        if operation == OP_INIT {
+            return 1;
+        } else {
+            if operation == OP_REQUEST_RESOURCES {
+                return 1;
+            } else {
+                if operation == OP_EXECUTE {
+                    return 1;
+                } else {
+                    if operation == OP_PROJECT {
+                        return 1;
+                    } else {
+                        if operation == OP_TERMINATE {
+                            return 1;
+                        } else {
+                            if operation == OP_REPORT_FAULT {
+                                return 1;
+                            } else {
+                                if operation == OP_TRANSITION {
+                                    return 1;
+                                } else {
+                                    return 0;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    proc K::is_valid_lifecycle_state(state: UInt32) -> UInt32 {
+        if state == STATE_UNBOUND {
+            return 1;
+        } else {
+            if state == STATE_BOUND {
+                return 1;
+            } else {
+                if state == STATE_INITIALIZED {
+                    return 1;
+                } else {
+                    if state == STATE_ACTIVE {
+                        return 1;
+                    } else {
+                        if state == STATE_SUSPENDED {
+                            return 1;
+                        } else {
+                            if state == STATE_TERMINATED {
+                                return 1;
+                            } else {
+                                if state == STATE_RELEASED {
+                                    return 1;
+                                } else {
+                                    return 0;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    proc K::capability_contains(caps: UInt64, required: UInt64) -> UInt32 {
+        if required == CAP_NONE {
+            return 0;
+        } else {
+            let masked = caps & required;
+            if masked == required {
+                return 1;
+            } else {
+                return 0;
+            }
+        }
+    }
+
+    proc K::validate_single_capability(allowed_caps: UInt64, requested_caps: UInt64, capability: UInt64) -> UInt32 {
+        let requested = capability_contains(requested_caps, capability);
+        if requested == 1 {
+            let allowed = capability_contains(allowed_caps, capability);
+            if allowed == 1 {
+                return STATUS_OK;
+            } else {
+                return STATUS_INVALID_CAPABILITY;
+            }
+        } else {
+            return STATUS_OK;
+        }
     }
 
     proc K::get_default_capabilities(domain: UInt8) -> UInt64 {
         if domain == DOMAIN_K {
-            return CAP_COMPUTE + CAP_MEMORY + CAP_IO + CAP_SCHEDULE + CAP_CROSS_DOMAIN + CAP_TELEMETRY;
+            return CAP_COMPUTE + CAP_MEMORY + CAP_IO + CAP_SCHEDULE + CAP_CROSS_DOMAIN + CAP_TELEMETRY + CAP_RESOURCE_RESERVE + CAP_LIFECYCLE;
         } else {
             if domain == DOMAIN_Q {
-                return CAP_COMPUTE + CAP_MEMORY + CAP_CROSS_DOMAIN + CAP_QUANTUM_STATE + CAP_TELEMETRY;
+                return CAP_COMPUTE + CAP_MEMORY + CAP_CROSS_DOMAIN + CAP_QUANTUM_STATE + CAP_TELEMETRY + CAP_RESOURCE_RESERVE + CAP_LIFECYCLE;
             } else {
                 if domain == DOMAIN_PHI {
-                    return CAP_COMPUTE + CAP_MEMORY + CAP_CROSS_DOMAIN + CAP_PHASE_STATE + CAP_TELEMETRY;
+                    return CAP_COMPUTE + CAP_MEMORY + CAP_CROSS_DOMAIN + CAP_PHASE_STATE + CAP_TELEMETRY + CAP_RESOURCE_RESERVE + CAP_LIFECYCLE;
                 } else {
                     return CAP_NONE;
+                }
+            }
+        }
+    }
+
+    proc K::required_capability_for_operation(target_domain: UInt8, operation: UInt32) -> UInt64 {
+        if operation == OP_INIT {
+            return CAP_COMPUTE + CAP_LIFECYCLE;
+        } else {
+            if operation == OP_REQUEST_RESOURCES {
+                return CAP_MEMORY + CAP_RESOURCE_RESERVE;
+            } else {
+                if operation == OP_EXECUTE {
+                    return CAP_COMPUTE;
+                } else {
+                    if operation == OP_PROJECT {
+                        if target_domain == DOMAIN_Q {
+                            return CAP_CROSS_DOMAIN + CAP_QUANTUM_STATE;
+                        } else {
+                            if target_domain == DOMAIN_PHI {
+                                return CAP_CROSS_DOMAIN + CAP_PHASE_STATE;
+                            } else {
+                                return CAP_CROSS_DOMAIN + CAP_TELEMETRY;
+                            }
+                        }
+                    } else {
+                        if operation == OP_TERMINATE {
+                            return CAP_SCHEDULE + CAP_LIFECYCLE;
+                        } else {
+                            if operation == OP_REPORT_FAULT {
+                                return CAP_TELEMETRY;
+                            } else {
+                                if operation == OP_TRANSITION {
+                                    return CAP_CROSS_DOMAIN + CAP_LIFECYCLE;
+                                } else {
+                                    return CAP_NONE;
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
     proc K::validate_capabilities(domain: UInt8, capabilities: UInt64) -> UInt32 {
-        let default_caps = get_default_capabilities(domain);
-        if default_caps == CAP_NONE {
+        if is_valid_domain(domain) == 0 {
             return STATUS_INVALID_DOMAIN;
         } else {
-            if capabilities > default_caps {
+            if capabilities == CAP_NONE {
                 return STATUS_INVALID_CAPABILITY;
             } else {
-                return STATUS_OK;
-            }
-        }
-    }
+                let allowed = get_default_capabilities(domain);
 
-    proc K::create_transfer_contract(source_domain: UInt8, target_domain: UInt8, capabilities: UInt64) -> UInt64 {
-        let source_caps = get_default_capabilities(source_domain);
-        let target_caps = get_default_capabilities(target_domain);
-        if source_caps == CAP_NONE {
-            return CAP_NONE;
-        } else {
-            if target_caps == CAP_NONE {
-                return CAP_NONE;
-            } else {
-                if capabilities == CAP_NONE {
-                    return CAP_NONE;
+                let v_compute = validate_single_capability(allowed, capabilities, CAP_COMPUTE);
+                if v_compute == STATUS_OK {
                 } else {
-                    return capabilities;
+                    return v_compute;
+                }
+
+                let v_memory = validate_single_capability(allowed, capabilities, CAP_MEMORY);
+                if v_memory == STATUS_OK {
+                } else {
+                    return v_memory;
+                }
+
+                let v_io = validate_single_capability(allowed, capabilities, CAP_IO);
+                if v_io == STATUS_OK {
+                } else {
+                    return v_io;
+                }
+
+                let v_schedule = validate_single_capability(allowed, capabilities, CAP_SCHEDULE);
+                if v_schedule == STATUS_OK {
+                } else {
+                    return v_schedule;
+                }
+
+                let v_cross = validate_single_capability(allowed, capabilities, CAP_CROSS_DOMAIN);
+                if v_cross == STATUS_OK {
+                } else {
+                    return v_cross;
+                }
+
+                let v_q = validate_single_capability(allowed, capabilities, CAP_QUANTUM_STATE);
+                if v_q == STATUS_OK {
+                } else {
+                    return v_q;
+                }
+
+                let v_phi = validate_single_capability(allowed, capabilities, CAP_PHASE_STATE);
+                if v_phi == STATUS_OK {
+                } else {
+                    return v_phi;
+                }
+
+                let v_telemetry = validate_single_capability(allowed, capabilities, CAP_TELEMETRY);
+                if v_telemetry == STATUS_OK {
+                } else {
+                    return v_telemetry;
+                }
+
+                let v_reserve = validate_single_capability(allowed, capabilities, CAP_RESOURCE_RESERVE);
+                if v_reserve == STATUS_OK {
+                } else {
+                    return v_reserve;
+                }
+
+                let v_lifecycle = validate_single_capability(allowed, capabilities, CAP_LIFECYCLE);
+                if v_lifecycle == STATUS_OK {
+                    return STATUS_OK;
+                } else {
+                    return v_lifecycle;
                 }
             }
         }
     }
 
-    proc K::generate_capability_token(domain: UInt8, capabilities: UInt64) -> UInt64 {
-        return capabilities + domain;
+    proc K::normalize_field(value: UInt32, cycle: UInt32) -> UInt32 {
+        let quotient = value / cycle;
+        return value - (quotient * cycle);
     }
 
-    proc K::validate_transfer_contract(source_domain: UInt8, target_domain: UInt8, contract_value: UInt64) -> UInt32 {
-        let rebuilt = create_transfer_contract(source_domain, target_domain, contract_value);
-        if rebuilt == CAP_NONE {
-            return STATUS_INVALID_CAPABILITY;
+    proc K::pack_capability_token(
+        origin_domain: UInt8,
+        target_domain: UInt8,
+        operation: UInt32,
+        scope: UInt32,
+        transfer_flag: UInt32,
+        process_id: UInt32,
+        logical_timestamp: UInt32
+    ) -> UInt64 {
+        let process_norm = normalize_field(process_id, TOKEN_PROCESS_CYCLE);
+        let timestamp_norm = normalize_field(logical_timestamp, TOKEN_TIMESTAMP_CYCLE);
+        let token_origin = domain_to_u32(origin_domain) * TOKEN_ORIGIN_FACTOR;
+        let token_target = domain_to_u32(target_domain) * TOKEN_TARGET_FACTOR;
+        let token_operation = operation * TOKEN_OPERATION_FACTOR;
+        let token_scope = scope * TOKEN_SCOPE_FACTOR;
+        let token_transfer = transfer_flag * TOKEN_TRANSFER_FACTOR;
+        let token_process = process_norm * TOKEN_PROCESS_FACTOR;
+        let token_timestamp = timestamp_norm;
+        return token_origin + token_target + token_operation + token_scope + token_transfer + token_process + token_timestamp;
+    }
+
+    proc K::token_origin(token: UInt64) -> UInt32 {
+        return token / TOKEN_ORIGIN_FACTOR;
+    }
+
+    proc K::token_target(token: UInt64) -> UInt32 {
+        let origin = token_origin(token);
+        let rem = token - (origin * TOKEN_ORIGIN_FACTOR);
+        return rem / TOKEN_TARGET_FACTOR;
+    }
+
+    proc K::token_operation(token: UInt64) -> UInt32 {
+        let origin = token_origin(token);
+        let target = token_target(token);
+        let rem = token - (origin * TOKEN_ORIGIN_FACTOR) - (target * TOKEN_TARGET_FACTOR);
+        return rem / TOKEN_OPERATION_FACTOR;
+    }
+
+    proc K::token_scope(token: UInt64) -> UInt32 {
+        let origin = token_origin(token);
+        let target = token_target(token);
+        let operation = token_operation(token);
+        let rem = token - (origin * TOKEN_ORIGIN_FACTOR) - (target * TOKEN_TARGET_FACTOR) - (operation * TOKEN_OPERATION_FACTOR);
+        return rem / TOKEN_SCOPE_FACTOR;
+    }
+
+    proc K::token_transfer_flag(token: UInt64) -> UInt32 {
+        let origin = token_origin(token);
+        let target = token_target(token);
+        let operation = token_operation(token);
+        let scope = token_scope(token);
+        let rem = token - (origin * TOKEN_ORIGIN_FACTOR) - (target * TOKEN_TARGET_FACTOR) - (operation * TOKEN_OPERATION_FACTOR) - (scope * TOKEN_SCOPE_FACTOR);
+        return rem / TOKEN_TRANSFER_FACTOR;
+    }
+
+    proc K::token_timestamp(token: UInt64) -> UInt32 {
+        let quotient = token / TOKEN_PROCESS_FACTOR;
+        return token - (quotient * TOKEN_PROCESS_FACTOR);
+    }
+
+    proc K::request_capability(
+        process_id: UInt32,
+        origin_domain: UInt8,
+        target_domain: UInt8,
+        operation: UInt32,
+        scope: UInt32,
+        requested_capabilities: UInt64,
+        transfer_flag: UInt32,
+        logical_timestamp: UInt32
+    ) -> UInt64 {
+        if is_valid_domain(origin_domain) == 1 {
+            if is_valid_domain(target_domain) == 1 {
+                if is_valid_operation(operation) == 1 {
+                    if is_valid_scope(scope) == 1 {
+                        if transfer_flag == TOKEN_TRANSFERABLE {
+                        } else {
+                            if transfer_flag == TOKEN_NON_TRANSFERABLE {
+                            } else {
+                                return TOKEN_NONE;
+                            }
+                        }
+
+                        let capability_status = validate_capabilities(origin_domain, requested_capabilities);
+                        if capability_status == STATUS_OK {
+                            let required = required_capability_for_operation(target_domain, operation);
+                            if required == CAP_NONE {
+                                return TOKEN_NONE;
+                            } else {
+                                let has_required = capability_contains(requested_capabilities, required);
+                                if has_required == 1 {
+                                    if origin_domain == target_domain {
+                                        return pack_capability_token(origin_domain, target_domain, operation, scope, transfer_flag, process_id, logical_timestamp);
+                                    } else {
+                                        let has_cross = capability_contains(requested_capabilities, CAP_CROSS_DOMAIN);
+                                        if has_cross == 1 {
+                                            return pack_capability_token(origin_domain, target_domain, operation, scope, transfer_flag, process_id, logical_timestamp);
+                                        } else {
+                                            return TOKEN_NONE;
+                                        }
+                                    }
+                                } else {
+                                    return TOKEN_NONE;
+                                }
+                            }
+                        } else {
+                            return TOKEN_NONE;
+                        }
+                    } else {
+                        return TOKEN_NONE;
+                    }
+                } else {
+                    return TOKEN_NONE;
+                }
+            } else {
+                return TOKEN_NONE;
+            }
         } else {
-            return STATUS_OK;
+            return TOKEN_NONE;
         }
     }
 
-    proc K::domain_init(domain: UInt8) -> UInt32 {
-        let caps = get_default_capabilities(domain);
-        if caps == CAP_NONE {
-            return STATUS_INVALID_DOMAIN;
+    proc K::validate_capability_token(
+        token: UInt64,
+        expected_origin_domain: UInt8,
+        expected_target_domain: UInt8,
+        expected_operation: UInt32,
+        expected_scope: UInt32,
+        logical_timestamp: UInt32
+    ) -> UInt32 {
+        if token == TOKEN_NONE {
+            return STATUS_UNAUTHORIZED;
         } else {
+            let origin = token_origin(token);
+            let target = token_target(token);
+            let operation = token_operation(token);
+            let scope = token_scope(token);
+            let transfer = token_transfer_flag(token);
+            let issued = token_timestamp(token);
+
+            if origin == domain_to_u32(expected_origin_domain) {
+                if target == domain_to_u32(expected_target_domain) {
+                    if is_valid_operation(operation) == 1 {
+                        if operation == expected_operation {
+                            if is_valid_scope(scope) == 1 {
+                                if scope == expected_scope {
+                                    if transfer == TOKEN_TRANSFERABLE {
+                                    } else {
+                                        if transfer == TOKEN_NON_TRANSFERABLE {
+                                        } else {
+                                            return STATUS_UNAUTHORIZED;
+                                        }
+                                    }
+
+                                    if logical_timestamp < issued {
+                                        return STATUS_TOKEN_REVOKED;
+                                    } else {
+                                        let age = logical_timestamp - issued;
+                                        if age > TOKEN_MAX_AGE {
+                                            return STATUS_TOKEN_REVOKED;
+                                        } else {
+                                            return STATUS_OK;
+                                        }
+                                    }
+                                } else {
+                                    return STATUS_INVALID_SCOPE;
+                                }
+                            } else {
+                                return STATUS_INVALID_SCOPE;
+                            }
+                        } else {
+                            return STATUS_UNAUTHORIZED;
+                        }
+                    } else {
+                        return STATUS_INVALID_OPERATION;
+                    }
+                } else {
+                    return STATUS_UNAUTHORIZED;
+                }
+            } else {
+                return STATUS_UNAUTHORIZED;
+            }
+        }
+    }
+
+    proc K::revoke_capability(token: UInt64, revocation_timestamp: UInt32, evaluation_timestamp: UInt32) -> UInt32 {
+        if token == TOKEN_NONE {
+            return STATUS_UNAUTHORIZED;
+        } else {
+            if evaluation_timestamp < revocation_timestamp {
+                return STATUS_OK;
+            } else {
+                return STATUS_TOKEN_REVOKED;
+            }
+        }
+    }
+
+    proc K::is_allowed_lifecycle_transition(current_state: UInt32, next_state: UInt32) -> UInt32 {
+        if current_state == STATE_UNBOUND {
+            if next_state == STATE_BOUND {
+                return 1;
+            } else {
+                return 0;
+            }
+        } else {
+            if current_state == STATE_BOUND {
+                if next_state == STATE_INITIALIZED {
+                    return 1;
+                } else {
+                    return 0;
+                }
+            } else {
+                if current_state == STATE_INITIALIZED {
+                    if next_state == STATE_ACTIVE {
+                        return 1;
+                    } else {
+                        return 0;
+                    }
+                } else {
+                    if current_state == STATE_ACTIVE {
+                        if next_state == STATE_SUSPENDED {
+                            return 1;
+                        } else {
+                            if next_state == STATE_TERMINATED {
+                                return 1;
+                            } else {
+                                return 0;
+                            }
+                        }
+                    } else {
+                        if current_state == STATE_SUSPENDED {
+                            if next_state == STATE_ACTIVE {
+                                return 1;
+                            } else {
+                                if next_state == STATE_TERMINATED {
+                                    return 1;
+                                } else {
+                                    return 0;
+                                }
+                            }
+                        } else {
+                            if current_state == STATE_TERMINATED {
+                                if next_state == STATE_RELEASED {
+                                    return 1;
+                                } else {
+                                    return 0;
+                                }
+                            } else {
+                                return 0;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    proc K::domain_lifecycle_transition(
+        domain: UInt8,
+        current_state: UInt32,
+        next_state: UInt32,
+        capability_token: UInt64,
+        logical_timestamp: UInt32
+    ) -> UInt32 {
+        if is_valid_domain(domain) == 1 {
+            if is_valid_lifecycle_state(current_state) == 1 {
+                if is_valid_lifecycle_state(next_state) == 1 {
+                    let allowed = is_allowed_lifecycle_transition(current_state, next_state);
+                    if allowed == 1 {
+                        return validate_capability_token(
+                            capability_token,
+                            domain,
+                            domain,
+                            OP_TRANSITION,
+                            SCOPE_LIFECYCLE,
+                            logical_timestamp
+                        );
+                    } else {
+                        return STATUS_INVALID_TRANSITION;
+                    }
+                } else {
+                    return STATUS_INVALID_STATE;
+                }
+            } else {
+                return STATUS_INVALID_STATE;
+            }
+        } else {
+            return STATUS_INVALID_DOMAIN;
+        }
+    }
+
+    proc K::request_cross_domain_transition(
+        source_domain: UInt8,
+        target_domain: UInt8,
+        current_state: UInt32,
+        next_state: UInt32,
+        capability_token: UInt64,
+        logical_timestamp: UInt32
+    ) -> UInt32 {
+        if source_domain == target_domain {
+            return STATUS_CROSS_DOMAIN_BLOCKED;
+        } else {
+            if is_valid_domain(source_domain) == 1 {
+                if is_valid_domain(target_domain) == 1 {
+                    let allowed = is_allowed_lifecycle_transition(current_state, next_state);
+                    if allowed == 1 {
+                        return validate_capability_token(
+                            capability_token,
+                            source_domain,
+                            target_domain,
+                            OP_TRANSITION,
+                            SCOPE_CROSS_DOMAIN,
+                            logical_timestamp
+                        );
+                    } else {
+                        return STATUS_INVALID_TRANSITION;
+                    }
+                } else {
+                    return STATUS_INVALID_DOMAIN;
+                }
+            } else {
+                return STATUS_INVALID_DOMAIN;
+            }
+        }
+    }
+
+    proc K::dal_init(domain: UInt8, current_state: UInt32, capability_token: UInt64, logical_timestamp: UInt32) -> UInt32 {
+        if current_state == STATE_BOUND {
+            return validate_capability_token(
+                capability_token,
+                domain,
+                domain,
+                OP_INIT,
+                SCOPE_LIFECYCLE,
+                logical_timestamp
+            );
+        } else {
+            return STATUS_PRECONDITION_FAILED;
+        }
+    }
+
+    proc K::dal_request_resources(domain: UInt8, current_state: UInt32, capability_token: UInt64, logical_timestamp: UInt32) -> UInt32 {
+        if current_state == STATE_INITIALIZED {
+            return validate_capability_token(
+                capability_token,
+                domain,
+                domain,
+                OP_REQUEST_RESOURCES,
+                SCOPE_RESOURCE_RESERVATION,
+                logical_timestamp
+            );
+        } else {
+            return STATUS_PRECONDITION_FAILED;
+        }
+    }
+
+    proc K::dal_execute(domain: UInt8, current_state: UInt32, capability_token: UInt64, logical_timestamp: UInt32) -> UInt32 {
+        if current_state == STATE_ACTIVE {
+            return validate_capability_token(
+                capability_token,
+                domain,
+                domain,
+                OP_EXECUTE,
+                SCOPE_EXECUTION_WINDOW,
+                logical_timestamp
+            );
+        } else {
+            return STATUS_PRECONDITION_FAILED;
+        }
+    }
+
+    proc K::dal_project(source_domain: UInt8, target_domain: UInt8, current_state: UInt32, capability_token: UInt64, logical_timestamp: UInt32) -> UInt32 {
+        if current_state == STATE_ACTIVE {
+            if source_domain == target_domain {
+                return validate_capability_token(
+                    capability_token,
+                    source_domain,
+                    target_domain,
+                    OP_PROJECT,
+                    SCOPE_DOMAIN_LOCAL,
+                    logical_timestamp
+                );
+            } else {
+                return validate_capability_token(
+                    capability_token,
+                    source_domain,
+                    target_domain,
+                    OP_PROJECT,
+                    SCOPE_CROSS_DOMAIN,
+                    logical_timestamp
+                );
+            }
+        } else {
+            return STATUS_PRECONDITION_FAILED;
+        }
+    }
+
+    proc K::dal_terminate(domain: UInt8, current_state: UInt32, capability_token: UInt64, logical_timestamp: UInt32) -> UInt32 {
+        if current_state == STATE_ACTIVE {
+            return validate_capability_token(
+                capability_token,
+                domain,
+                domain,
+                OP_TERMINATE,
+                SCOPE_LIFECYCLE,
+                logical_timestamp
+            );
+        } else {
+            if current_state == STATE_SUSPENDED {
+                return validate_capability_token(
+                    capability_token,
+                    domain,
+                    domain,
+                    OP_TERMINATE,
+                    SCOPE_LIFECYCLE,
+                    logical_timestamp
+                );
+            } else {
+                return STATUS_PRECONDITION_FAILED;
+            }
+        }
+    }
+
+    proc K::dal_report_fault(domain: UInt8, current_state: UInt32, capability_token: UInt64, logical_timestamp: UInt32) -> UInt32 {
+        if current_state == STATE_RELEASED {
+            return STATUS_PRECONDITION_FAILED;
+        } else {
+            return validate_capability_token(
+                capability_token,
+                domain,
+                domain,
+                OP_REPORT_FAULT,
+                SCOPE_DOMAIN_LOCAL,
+                logical_timestamp
+            );
+        }
+    }
+
+    // Compatibility wrappers retained for existing integration callers.
+    proc K::create_transfer_contract(source_domain: UInt8, target_domain: UInt8, capabilities: UInt64) -> UInt64 {
+        return request_capability(
+            1,
+            source_domain,
+            target_domain,
+            OP_TRANSITION,
+            SCOPE_CROSS_DOMAIN,
+            capabilities,
+            TOKEN_NON_TRANSFERABLE,
+            1
+        );
+    }
+
+    proc K::generate_capability_token(domain: UInt8, capabilities: UInt64) -> UInt64 {
+        return request_capability(
+            1,
+            domain,
+            domain,
+            OP_EXECUTE,
+            SCOPE_EXECUTION_WINDOW,
+            capabilities,
+            TOKEN_NON_TRANSFERABLE,
+            1
+        );
+    }
+
+    proc K::validate_transfer_contract(source_domain: UInt8, target_domain: UInt8, contract_value: UInt64) -> UInt32 {
+        return validate_capability_token(
+            contract_value,
+            source_domain,
+            target_domain,
+            OP_TRANSITION,
+            SCOPE_CROSS_DOMAIN,
+            1
+        );
+    }
+
+    proc K::domain_init(domain: UInt8) -> UInt32 {
+        if is_valid_domain(domain) == 1 {
             return STATUS_OK;
+        } else {
+            return STATUS_INVALID_DOMAIN;
         }
     }
 
@@ -106,5 +841,25 @@ forge XdvDal {
 
     proc K::domain_status_name(code: UInt32) -> UInt32 {
         return code;
+    }
+
+    proc K::xdv_dal_interface_version_major() -> UInt32 {
+        return DAL_INTERFACE_VERSION_MAJOR;
+    }
+
+    proc K::xdv_dal_interface_version_minor() -> UInt32 {
+        return DAL_INTERFACE_VERSION_MINOR;
+    }
+
+    proc K::xdv_dal_interface_version_patch() -> UInt32 {
+        return DAL_INTERFACE_VERSION_PATCH;
+    }
+
+    proc K::xdv_dal_capability_model_version() -> UInt32 {
+        return DAL_CAPABILITY_MODEL_VERSION;
+    }
+
+    proc K::xdv_dal_lifecycle_api_version() -> UInt32 {
+        return DAL_LIFECYCLE_API_VERSION;
     }
 }

@@ -1,43 +1,285 @@
 // File: dal_tests.ds - This file is part of XDV
 // Copyright (c) 2026 Dust LLC, and Contributors
 // Description:
-//   XDV Kernel - DAL Tests
+//   XDV DAL tests with negative transition and capability-path coverage.
 
 forge DalTests {
 
-    proc K::test_domain_types() {
-        return 0;
+    const TEST_PASS: UInt32 = 0;
+    const TEST_FAIL: UInt32 = 1;
+
+    const STATUS_OK: UInt32 = 0;
+    const STATUS_INVALID_TRANSITION: UInt32 = 5;
+    const STATUS_INVALID_SCOPE: UInt32 = 4;
+    const STATUS_TOKEN_REVOKED: UInt32 = 7;
+    const STATUS_PRECONDITION_FAILED: UInt32 = 8;
+    const STATUS_CROSS_DOMAIN_BLOCKED: UInt32 = 9;
+
+    const DOMAIN_K: UInt8 = 0;
+    const DOMAIN_Q: UInt8 = 1;
+
+    const OP_TRANSITION: UInt32 = 7;
+    const OP_EXECUTE: UInt32 = 3;
+    const OP_PROJECT: UInt32 = 4;
+
+    const SCOPE_LIFECYCLE: UInt32 = 5;
+    const SCOPE_CROSS_DOMAIN: UInt32 = 4;
+    const SCOPE_EXECUTION_WINDOW: UInt32 = 3;
+
+    const STATE_UNBOUND: UInt32 = 0;
+    const STATE_BOUND: UInt32 = 1;
+    const STATE_INITIALIZED: UInt32 = 2;
+    const STATE_ACTIVE: UInt32 = 3;
+    const STATE_TERMINATED: UInt32 = 5;
+    const STATE_RELEASED: UInt32 = 6;
+
+    const CAP_COMPUTE: UInt64 = 1;
+    const CAP_CROSS_DOMAIN: UInt64 = 16;
+    const CAP_QUANTUM_STATE: UInt64 = 32;
+    const CAP_LIFECYCLE: UInt64 = 512;
+
+    const TOKEN_NON_TRANSFERABLE: UInt32 = 0;
+    const TOKEN_NONE: UInt64 = 0;
+
+    proc K::expect_status(actual: UInt32, expected: UInt32) -> UInt32 {
+        if actual == expected {
+            return TEST_PASS;
+        } else {
+            return TEST_FAIL;
+        }
     }
 
-    proc K::test_domain_constants() {
-        return 0;
+    proc K::build_local_transition_token(logical_time: UInt32) -> UInt64 {
+        return request_capability(
+            7,
+            DOMAIN_K,
+            DOMAIN_K,
+            OP_TRANSITION,
+            SCOPE_LIFECYCLE,
+            CAP_CROSS_DOMAIN + CAP_LIFECYCLE,
+            TOKEN_NON_TRANSFERABLE,
+            logical_time
+        );
     }
 
-    proc K::test_capabilities() {
-        return 0;
+    proc K::build_cross_transition_token(logical_time: UInt32) -> UInt64 {
+        return request_capability(
+            7,
+            DOMAIN_K,
+            DOMAIN_Q,
+            OP_TRANSITION,
+            SCOPE_CROSS_DOMAIN,
+            CAP_CROSS_DOMAIN + CAP_LIFECYCLE,
+            TOKEN_NON_TRANSFERABLE,
+            logical_time
+        );
     }
 
-    proc K::test_domain_status() {
-        return 0;
+    proc K::test_domain_init_accepts_known_domains() -> UInt32 {
+        let k = domain_init(DOMAIN_K);
+        if k == STATUS_OK {
+            let q = domain_init(DOMAIN_Q);
+            if q == STATUS_OK {
+                return TEST_PASS;
+            } else {
+                return TEST_FAIL;
+            }
+        } else {
+            return TEST_FAIL;
+        }
     }
 
-    proc K::test_default_caps_k() {
-        return 0;
+    proc K::test_request_capability_requires_cross_domain_capability() -> UInt32 {
+        let token = request_capability(
+            9,
+            DOMAIN_K,
+            DOMAIN_Q,
+            OP_TRANSITION,
+            SCOPE_CROSS_DOMAIN,
+            CAP_LIFECYCLE,
+            TOKEN_NON_TRANSFERABLE,
+            10
+        );
+        if token == TOKEN_NONE {
+            return TEST_PASS;
+        } else {
+            return TEST_FAIL;
+        }
     }
 
-    proc K::test_default_caps_q() {
-        return 0;
+    proc K::test_invalid_transition_unbound_to_active() -> UInt32 {
+        let token = build_local_transition_token(11);
+        if token == TOKEN_NONE {
+            return TEST_FAIL;
+        } else {
+            let status = domain_lifecycle_transition(DOMAIN_K, STATE_UNBOUND, STATE_ACTIVE, token, 12);
+            return expect_status(status, STATUS_INVALID_TRANSITION);
+        }
     }
 
-    proc K::test_default_caps_phi() {
-        return 0;
+    proc K::test_invalid_transition_initialized_to_released() -> UInt32 {
+        let token = build_local_transition_token(13);
+        if token == TOKEN_NONE {
+            return TEST_FAIL;
+        } else {
+            let status = domain_lifecycle_transition(DOMAIN_K, STATE_INITIALIZED, STATE_RELEASED, token, 14);
+            return expect_status(status, STATUS_INVALID_TRANSITION);
+        }
     }
 
-    proc K::test_validate_caps() {
-        return 0;
+    proc K::test_invalid_transition_terminated_to_active() -> UInt32 {
+        let token = build_local_transition_token(15);
+        if token == TOKEN_NONE {
+            return TEST_FAIL;
+        } else {
+            let status = domain_lifecycle_transition(DOMAIN_K, STATE_TERMINATED, STATE_ACTIVE, token, 16);
+            return expect_status(status, STATUS_INVALID_TRANSITION);
+        }
     }
 
-    proc K::test_transfer_contract() {
-        return 0;
+    proc K::test_cross_domain_transition_rejects_same_domain_route() -> UInt32 {
+        let token = build_local_transition_token(17);
+        if token == TOKEN_NONE {
+            return TEST_FAIL;
+        } else {
+            let status = request_cross_domain_transition(DOMAIN_K, DOMAIN_K, STATE_BOUND, STATE_INITIALIZED, token, 18);
+            return expect_status(status, STATUS_CROSS_DOMAIN_BLOCKED);
+        }
+    }
+
+    proc K::test_cross_domain_transition_requires_cross_scope() -> UInt32 {
+        let wrong_scope_token = request_capability(
+            19,
+            DOMAIN_K,
+            DOMAIN_Q,
+            OP_TRANSITION,
+            SCOPE_LIFECYCLE,
+            CAP_CROSS_DOMAIN + CAP_LIFECYCLE,
+            TOKEN_NON_TRANSFERABLE,
+            20
+        );
+        if wrong_scope_token == TOKEN_NONE {
+            return TEST_FAIL;
+        } else {
+            let status = request_cross_domain_transition(DOMAIN_K, DOMAIN_Q, STATE_BOUND, STATE_INITIALIZED, wrong_scope_token, 21);
+            return expect_status(status, STATUS_INVALID_SCOPE);
+        }
+    }
+
+    proc K::test_execute_requires_active_state() -> UInt32 {
+        let token = request_capability(
+            22,
+            DOMAIN_K,
+            DOMAIN_K,
+            OP_EXECUTE,
+            SCOPE_EXECUTION_WINDOW,
+            CAP_COMPUTE,
+            TOKEN_NON_TRANSFERABLE,
+            23
+        );
+        if token == TOKEN_NONE {
+            return TEST_FAIL;
+        } else {
+            let status = dal_execute(DOMAIN_K, STATE_BOUND, token, 24);
+            return expect_status(status, STATUS_PRECONDITION_FAILED);
+        }
+    }
+
+    proc K::test_project_requires_active_state() -> UInt32 {
+        let token = request_capability(
+            25,
+            DOMAIN_K,
+            DOMAIN_Q,
+            OP_PROJECT,
+            SCOPE_CROSS_DOMAIN,
+            CAP_CROSS_DOMAIN + CAP_QUANTUM_STATE,
+            TOKEN_NON_TRANSFERABLE,
+            26
+        );
+        if token == TOKEN_NONE {
+            return TEST_FAIL;
+        } else {
+            let status = dal_project(DOMAIN_K, DOMAIN_Q, STATE_INITIALIZED, token, 27);
+            return expect_status(status, STATUS_PRECONDITION_FAILED);
+        }
+    }
+
+    proc K::test_valid_transition_bound_to_initialized() -> UInt32 {
+        let token = build_local_transition_token(28);
+        if token == TOKEN_NONE {
+            return TEST_FAIL;
+        } else {
+            let status = domain_lifecycle_transition(DOMAIN_K, STATE_BOUND, STATE_INITIALIZED, token, 29);
+            return expect_status(status, STATUS_OK);
+        }
+    }
+
+    proc K::test_token_age_revocation() -> UInt32 {
+        let token = build_cross_transition_token(30);
+        if token == TOKEN_NONE {
+            return TEST_FAIL;
+        } else {
+            let status = validate_capability_token(token, DOMAIN_K, DOMAIN_Q, OP_TRANSITION, SCOPE_CROSS_DOMAIN, 200050);
+            return expect_status(status, STATUS_TOKEN_REVOKED);
+        }
+    }
+
+    proc K::run_all() -> UInt32 {
+        let t1 = test_domain_init_accepts_known_domains();
+        if t1 == TEST_PASS {
+            let t2 = test_request_capability_requires_cross_domain_capability();
+            if t2 == TEST_PASS {
+                let t3 = test_invalid_transition_unbound_to_active();
+                if t3 == TEST_PASS {
+                    let t4 = test_invalid_transition_initialized_to_released();
+                    if t4 == TEST_PASS {
+                        let t5 = test_invalid_transition_terminated_to_active();
+                        if t5 == TEST_PASS {
+                            let t6 = test_cross_domain_transition_rejects_same_domain_route();
+                            if t6 == TEST_PASS {
+                                let t7 = test_cross_domain_transition_requires_cross_scope();
+                                if t7 == TEST_PASS {
+                                    let t8 = test_execute_requires_active_state();
+                                    if t8 == TEST_PASS {
+                                        let t9 = test_project_requires_active_state();
+                                        if t9 == TEST_PASS {
+                                            let t10 = test_valid_transition_bound_to_initialized();
+                                            if t10 == TEST_PASS {
+                                                let t11 = test_token_age_revocation();
+                                                if t11 == TEST_PASS {
+                                                    return TEST_PASS;
+                                                } else {
+                                                    return TEST_FAIL;
+                                                }
+                                            } else {
+                                                return TEST_FAIL;
+                                            }
+                                        } else {
+                                            return TEST_FAIL;
+                                        }
+                                    } else {
+                                        return TEST_FAIL;
+                                    }
+                                } else {
+                                    return TEST_FAIL;
+                                }
+                            } else {
+                                return TEST_FAIL;
+                            }
+                        } else {
+                            return TEST_FAIL;
+                        }
+                    } else {
+                        return TEST_FAIL;
+                    }
+                } else {
+                    return TEST_FAIL;
+                }
+            } else {
+                return TEST_FAIL;
+            }
+        } else {
+            return TEST_FAIL;
+        }
     }
 }
